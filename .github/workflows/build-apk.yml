@@ -37,6 +37,21 @@ jobs:
           npx cap copy android
           npx cap sync android
 
+      - name: Ensure CAMERA permission in AndroidManifest.xml
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = "android/app/src/main/AndroidManifest.xml";
+            let xml = fs.readFileSync(p, "utf8");
+            const permBlock = "\n    <uses-permission android:name=\"android.permission.CAMERA\" />\n    <uses-permission android:name=\"android.permission.FLASHLIGHT\" />\n    <uses-feature android:name=\"android.hardware.camera.flash\" android:required=\"false\" />\n";
+            if (!xml.includes("android.permission.CAMERA")) {
+              xml = xml.replace(/(<manifest[^>]*>)/, "$1" + permBlock);
+              fs.writeFileSync(p, xml, "utf8");
+            }
+            console.log("=== UPDATED AndroidManifest.xml ===");
+            console.log(fs.readFileSync(p, "utf8"));
+          '
+
       - name: Build Debug APK
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleDebug --stacktrace
@@ -44,5 +59,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FlashlightApp-debug-apk
+          name: FlashlightApp-debug-apk-run-${{ github.run_number }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
