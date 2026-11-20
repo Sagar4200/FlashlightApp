@@ -1,3 +1,13 @@
-<uses-permission android:name="android.permission.CAMERA" />
-<uses-permission android:name="android.permission.FLASHLIGHT" />
-<uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+   - name: Add Camera & Flashlight permissions
+     run: |
+       node -e '
+         const fs = require("fs");
+         const p = "android/app/src/main/AndroidManifest.xml";
+         let xml = fs.readFileSync(p, "utf8");
+         const block = `\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.FLASHLIGHT" />\n    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />\n`;
+         if (!xml.includes("android.permission.CAMERA")) {
+           xml = xml.replace(/(<manifest[^>]*>)/, "$1" + block);
+           fs.writeFileSync(p, xml, "utf8");
+         }
+         console.log(fs.readFileSync(p, "utf8"));
+       '
