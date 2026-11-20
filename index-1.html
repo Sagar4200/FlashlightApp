@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>3D Flashlight</title>
+<script src="cordova.js"></script>
+<style>
+:root{--bg:#0b0d12;--bg2:#171b25;--fg:#e9edf5;--mute:#8a93a6;--glow:255,214,140;--panel:rgba(255,255,255,.07);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0d12;--bg2:#171b25}}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#1a1f2b;--bg2:#2a3142}}
+:root[data-theme="dark"]{--bg:#0b0d12;--bg2:#171b25}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(120% 80% at 50% 100%,var(--bg2),var(--bg));color:var(--fg);font-family:"Trebuchet MS",system-ui,sans-serif;overflow:hidden;position:relative}
+#wall{position:fixed;inset:0;background:radial-gradient(60% 55% at 50% 38%,rgba(var(--glow),.55),rgba(var(--glow),.12) 55%,transparent 80%);opacity:0;transition:opacity .5s}
+body.on #wall{opacity:1}
+#stage{position:absolute;left:0;right:0;top:4%;height:68%;display:flex;align-items:center;justify-content:center;perspective:900px;touch-action:none;cursor:grab}
+#beam{position:absolute;left:50%;top:-6%;width:130%;max-width:760px;height:62%;transform:translateX(-50%);
+background:linear-gradient(to top,rgba(var(--glow),.85),rgba(var(--glow),.28) 45%,transparent);
+clip-path:polygon(43% 100%,57% 100%,100% 0,0 0);filter:blur(10px);opacity:0;transition:opacity .35s;pointer-events:none}
+body.on #beam{opacity:var(--b,1)}
+body.flick #beam,body.flick #wall{animation:fl .5s steps(1) 1}
+@keyframes fl{0%{opacity:0}20%{opacity:1}35%{opacity:.2}55%{opacity:1}70%{opacity:.5}100%{opacity:1}}
+#fl{position:relative;width:0;height:0;transform-style:preserve-3d}
+.p{position:absolute;transform-style:preserve-3d}
+.s{position:absolute;backface-visibility:hidden}
+.disc{position:absolute;border-radius:50%}
+#shadow{position:absolute;left:50%;bottom:21%;width:150px;height:26px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(rgba(0,0,0,.6),transparent 70%);filter:blur(4px)}
+#ui{position:absolute;left:0;right:0;bottom:0;padding:12px 18px 18px;display:grid;gap:12px;justify-items:center}
+#main{font:700 18px/1 inherit;font-family:inherit;color:#241a05;border:0;border-radius:40px;padding:16px 46px;background:linear-gradient(#ffe3a6,#e9a93b);box-shadow:0 6px 0 #9a6410,0 12px 24px rgba(0,0,0,.45);cursor:pointer;transition:transform .08s,box-shadow .08s}
+#main:active{transform:translateY(5px);box-shadow:0 1px 0 #9a6410,0 4px 10px rgba(0,0,0,.4)}
+body:not(.on) #main{color:var(--fg);background:linear-gradient(#3a4256,#252b3b);box-shadow:0 6px 0 #11141c,0 12px 24px rgba(0,0,0,.45)}
+.row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.chip{font:600 14px inherit;font-family:inherit;color:var(--fg);background:var(--panel);border:1px solid rgba(255,255,255,.14);border-radius:24px;padding:10px 16px;cursor:pointer}
+.chip:focus-visible,#main:focus-visible{outline:3px solid #ffd78a;outline-offset:3px}
+label{font-size:13px;color:var(--mute);display:flex;gap:8px;align-items:center}
+input[type=range]{width:120px;accent-color:#f0b34d}
+#msg{font-size:13px;color:var(--mute);min-height:16px;text-align:center;max-width:340px}
+#fill{position:fixed;inset:0;z-index:9;display:none;align-items:flex-end;justify-content:center;padding:24px;
+background:radial-gradient(circle at 50% 45%,rgb(var(--fc)) 0,rgb(var(--fc)) 100%);}
+#fill.show{display:flex}
+#fill button{font:600 15px inherit;font-family:inherit;border:0;border-radius:30px;padding:12px 26px;background:rgba(0,0,0,.65);color:#fff;cursor:pointer}
+@media (prefers-reduced-motion:reduce){body.flick #beam,body.flick #wall{animation:none}}
+</style>
+</head>
+<body>
+<div id="wall"></div>
+<div id="stage" aria-label="3D flashlight, drag to rotate">
+  <div id="beam"></div>
+  <div id="fl"></div>
+</div>
+<div id="shadow"></div>
+<div id="ui">
+  <button id="main" aria-pressed="false">Torch ON</button>
+  <div id="msg">Tap the button to turn the torch on or off.</div>
+</div>
+
+<script>
+(function(){
+var fl=document.getElementById('fl'),body=document.body,msg=document.getElementById('msg');
+var N=30,ry=25,rx=-16,vel=.25,drag=false,lastX=0,lastY=0,on=false,br=1,strips=[];
+
+function cyl(name,r,h,y,hue,sat,lit,ridge){
+  var g=document.createElement('div');g.className='p';g.style.top=y+'px';
+  var w=2*Math.PI*r/N+1.5;
+  for(var i=0;i<N;i++){
+    var s=document.createElement('div');s.className='s';
+    s.style.cssText='width:'+w+'px;height:'+h+'px;left:'+(-w/2)+'px;top:'+(-h/2)+'px;transform:rotateY('+(i*360/N)+'deg) translateZ('+r+'px)';
+    if(ridge)s.style.backgroundImage='linear-gradient(rgba(0,0,0,.35) 0 2px,rgba(255,255,255,.08) 2px 4px,transparent 4px 11px)';
+    g.appendChild(s);strips.push({el:s,a:i*360/N,hue:hue,sat:sat,lit:lit});
+  }
+  fl.appendChild(g);return g;
+}
+function disc(r,y,css){
+  var d=document.createElement('div');d.className='disc';
+  d.style.cssText='width:'+2*r+'px;height:'+2*r+'px;left:'+(-r)+'px;top:'+(-r)+'px;transform:translateY('+y+'px) rotateX(90deg);'+css;
+  fl.appendChild(d);return d;
+}
+/* handle, grip, neck, head, bezel */
+cyl('h',34,150,52,215,14,30,true);
+cyl('g',36,30,-40,215,10,22,false);
+cyl('n',44,18,-62,215,16,38,false);
+cyl('hd',58,58,-92,215,12,44,false);
+disc(34,127,'background:#12151c');
+disc(58,-63,'background:#2b3040');
+disc(58,-121,'background:linear-gradient(135deg,#d9deea,#7d869b 50%,#c9cfdd);box-shadow:0 0 0 3px #4a5166 inset');
+var inner=disc(47,-122,'background:radial-gradient(circle,#fff6dd 0,#e6c37a 45%,#8f6a22 100%);transition:box-shadow .3s,filter .3s');
+inner.style.transform+=' translateZ(1px)';
+/* button */
+var btnG=document.createElement('div');btnG.className='p';btnG.style.cssText='top:-5px;transform:translateZ(0)';
+var bt=document.createElement('div');
+bt.style.cssText='position:absolute;width:20px;height:44px;left:-10px;top:-22px;border-radius:10px;transform:rotateY(0deg) translateZ(36px);background:linear-gradient(#c93b3b,#7a1717);box-shadow:0 0 0 3px #1c2029;cursor:pointer';
+btnG.appendChild(bt);fl.appendChild(btnG);
+/* handle strap loop ring */
+cyl('r',37,6,128,0,0,10,false);
+
+function shade(){
+  for(var i=0;i<strips.length;i++){
+    var s=strips[i],a=(s.a+ry)*Math.PI/180,c=Math.cos(a-0.9);
+    var l=s.lit*(.35+.75*Math.max(0,c))+ (c>.85?18*(c-.85)/.15:0);
+    s.el.style.backgroundColor='hsl('+s.hue+','+s.sat+'%,'+Math.min(l,88)+'%)';
+  }
+}
+function render(){
+  fl.style.transform='rotateX('+rx+'deg) rotateY('+ry+'deg)';
+  var bob=Math.sin(Date.now()/1400)*3;
+  fl.parentNode.style.transform='translateY('+bob+'px)';
+  shade();
+}
+function loop(){ if(!drag){ry+=vel;vel+=(.25-vel)*.02;} render();requestAnimationFrame(loop);}
+
+var st=document.getElementById('stage');
+st.addEventListener('pointerdown',function(e){drag=true;lastX=e.clientX;lastY=e.clientY;st.setPointerCapture(e.pointerId);st.style.cursor='grabbing';st._m=0;});
+st.addEventListener('pointermove',function(e){if(!drag)return;var dx=e.clientX-lastX,dy=e.clientY-lastY;st._m+=Math.abs(dx)+Math.abs(dy);ry+=dx*.6;vel=dx*.3;rx=Math.max(-40,Math.min(5,rx+dy*.2));lastX=e.clientX;lastY=e.clientY;});
+st.addEventListener('pointerup',function(e){drag=false;st.style.cursor='grab';if(e.target===bt&&st._m<6)toggle();});
+
+var ctx;function click(){try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();var o=ctx.createOscillator(),g=ctx.createGain();o.type='square';o.frequency.value=on?900:520;g.gain.value=.05;g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.06);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+.07);}catch(e){}}
+
+var toggle=function(force){
+  on=typeof force==='boolean'?force:!on;
+  body.classList.toggle('on',on);
+  body.classList.remove('flick');void body.offsetWidth;if(on)body.classList.add('flick');
+  inner.style.boxShadow=on?'0 0 50px 22px rgba(255,214,140,.95),0 0 120px 60px rgba(255,200,110,.5)':'none';
+  inner.style.filter=on?'brightness(1.4)':'brightness(.75)';
+  bt.style.transform='translateZ('+(on?33:36)+'px)';
+  var m=document.getElementById('main');m.textContent=on?'Turn off':'Turn on';m.setAttribute('aria-pressed',on);
+  click();
+  setTorch(on);
+}
+document.getElementById('main').onclick=function(){toggle();};
+
+/* ---- TORCH (native only: never opens the camera, so video calls are not disturbed) ----
+   Order: 1) window.AndroidTorch (Java bridge, recommended)  2) cordova-plugin-flashlight  3) Capacitor Torch */
+var keep=null,busy=false;
+function say(t){msg.textContent=t;}
+function bridge(){return window.AndroidTorch||null;}
+
+function nativeTorch(state){
+  return new Promise(function(res){
+    try{
+      var B=bridge();
+      if(B&&B.setTorch){res(!!B.setTorch(state));return;}
+      var f=window.plugins&&window.plugins.flashlight;
+      if(f){ if(state)f.switchOn(function(){res(true)},function(){res(false)},{intensity:1});
+             else f.switchOff(function(){res(true)},function(){res(false)}); return; }
+      var T=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Torch;
+      if(T){ (state?T.enable():T.disable()).then(function(){res(true)},function(){res(false)}); return; }
+    }catch(e){}
+    res(null);
+  });
+}
+
+async function askPermissions(){
+  var asked=false;
+  try{var B=bridge();if(B&&B.requestPermission){B.requestPermission();asked=true;}}catch(e){}
+  try{var C=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Camera;
+      if(C&&C.requestPermissions){await C.requestPermissions({permissions:['camera']});asked=true;}}catch(e){}
+  try{var P=window.cordova&&cordova.plugins&&cordova.plugins.permissions;
+      if(P){P.requestPermission(P.CAMERA,function(){},function(){});asked=true;}}catch(e){}
+  return asked;
+}
+
+async function setTorch(state){
+  clearInterval(keep);
+  var n=await nativeTorch(state);
+  if(n===null){say('Torch bridge not found. Add the Android torch code (see instructions).');return false;}
+  if(n===false&&state){say('Torch could not start. Check camera permission in app settings.');return false;}
+  if(state){ /* keep it ON, even when a video call opens/closes a camera */
+    keep=setInterval(function(){nativeTorch(true);},800);
+  }
+  return true;
+}
+
+/* UI */
+var mainBtn=document.getElementById('main');
+function paint(){
+  body.classList.toggle('on',on);
+  inner.style.boxShadow=on?'0 0 50px 22px rgba(255,214,140,.95),0 0 120px 60px rgba(255,200,110,.5)':'none';
+  inner.style.filter=on?'brightness(1.4)':'brightness(.75)';
+  bt.style.transform='translateZ('+(on?33:36)+'px)';
+  mainBtn.textContent=on?'Torch OFF':'Torch ON';
+  mainBtn.setAttribute('aria-pressed',on);
+}
+toggle=async function(force){
+  if(busy)return;busy=true;
+  var want=typeof force==='boolean'?force:!on;
+  var ok=await setTorch(want);
+  if(ok){
+    on=want;paint();
+    body.classList.remove('flick');void body.offsetWidth;if(on)body.classList.add('flick');
+    click();say(on?'Torch is ON':'Torch is OFF');
+  }
+  busy=false;
+};
+mainBtn.onclick=function(){toggle();};
+
+/* ask for camera/torch permission at start and on first touch */
+var asked=false;
+function firstAsk(){ if(asked)return; asked=true; askPermissions(); }
+document.addEventListener('deviceready',firstAsk,false);
+window.addEventListener('load',function(){setTimeout(firstAsk,400);});
+document.addEventListener('pointerdown',firstAsk,{once:true});
+
+/* re-light after returning to the app */
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&on)setTorch(true);});
+document.addEventListener('resume',function(){if(on)setTorch(true);},false);
+
+loop();
+})();
+</script>
+</body>
+</html>
