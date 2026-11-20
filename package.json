@@ -1,0 +1,13 @@
+{
+  "name": "flashlight-app",
+  "version": "1.0.0",
+  "description": "FlashlightApp built with HTML/CSS and Capacitor",
+  "scripts": {
+    "build-android": "npx cap add android && npx cap copy && npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/android": "^6.0.0"
+  }
+}
