@@ -31,6 +31,8 @@ jobs:
       - name: Install dependencies & sync Capacitor
         run: |
           npm install
+          mkdir -p www
+          cp index.html www/
           npx cap add android || true
           npx cap copy android
           npx cap sync android
